@@ -6,25 +6,26 @@ import sys, os, struct, time
 
 def build_ping_payload(char: str):
     """
-    Crea un payload ICMP de 32 bytes, idéntico al de un ping Linux típico.
-    - Primeros 8 bytes: timestamp simulado.
-    - Posición 8: carácter secreto.
-    - Resto: patrón que simula ping real.
+    Crea un payload ICMP de 56 bytes (8 bytes timestamp + 48 bytes patrón),
+    idéntico al de un ping Linux típico con tamaño por defecto.
+    - Primeros 8 bytes: timestamp
+    - Byte 8: carácter secreto
+    - Resto: patrón incremental estándar de Linux (0x00 a 0x2F)
     """
     # Primeros 8 bytes: timestamp (simulado)
     ts = int(time.time() * 1000) & 0xFFFFFFFFFFFFFFFF
     first8 = struct.pack("!Q", ts)  # 8 bytes
-
-    # Posición 8: carácter secreto
+    
+    # Byte 8: carácter secreto
     secret = bytes(char, "utf-8")[:1]
-    filler = b"\x00" * 7              # completar 8 bytes
-    secret_zone = secret + filler
-
-    # Resto del payload: patrón incremental como ping Linux (para 32 bytes total)
-    # Ya tenemos 16 bytes, necesitamos 16 más
-    tail = bytes(range(0x10, 0x10 + 16))  # 0x10 a 0x1F
-
-    return first8 + secret_zone + tail
+    
+    # Generar el patrón estándar de Linux (48 bytes: 0x00 a 0x2F)
+    standard_pattern = bytes(range(0, 48))
+    
+    # Insertar el carácter secreto en la posición 8 del patrón
+    payload = first8 + standard_pattern[:8] + secret + standard_pattern[9:]
+    
+    return payload
 
 def send_icmp_message(message, dst="8.8.8.8"):
     """
@@ -37,6 +38,7 @@ def send_icmp_message(message, dst="8.8.8.8"):
         pkt = IP(dst=dst)/ICMP(type=8, seq=seq, id=os.getpid() & 0xFFFF)/payload
         pkt.show()   # Mostrar campos del paquete para evidencia
         send(pkt, verbose=0)
+        time.sleep(1)  # Esperar 1 segundo entre paquetes como ping normal
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
